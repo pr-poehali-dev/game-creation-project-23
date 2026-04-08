@@ -10,26 +10,7 @@ export const CHARACTERS: Character[] = [
     maxHp: 100,
     attackPower: { head: 35, body: 20, legs: 12 },
     color: '#e53e3e',
-    specialAbilities: [
-      {
-        id: 'blade-storm',
-        name: 'Шквал клинков',
-        description: 'Серия молниеносных ударов по всем зонам',
-        damage: 45,
-        cooldown: 3,
-        currentCooldown: 0,
-        icon: '⚡',
-      },
-      {
-        id: 'death-strike',
-        name: 'Смертельный удар',
-        description: 'Мощный удар в голову с игнорированием блока',
-        damage: 55,
-        cooldown: 5,
-        currentCooldown: 0,
-        icon: '💀',
-      },
-    ],
+    specialAbilities: [],
   },
   {
     id: 'rex',
@@ -40,26 +21,7 @@ export const CHARACTERS: Character[] = [
     maxHp: 120,
     attackPower: { head: 40, body: 25, legs: 15 },
     color: '#3182ce',
-    specialAbilities: [
-      {
-        id: 'ground-smash',
-        name: 'Сокрушитель',
-        description: 'Мощный удар, оглушающий противника',
-        damage: 50,
-        cooldown: 3,
-        currentCooldown: 0,
-        icon: '🔥',
-      },
-      {
-        id: 'berserker',
-        name: 'Берсерк',
-        description: 'Двойной удар в тело с максимальной силой',
-        damage: 60,
-        cooldown: 5,
-        currentCooldown: 0,
-        icon: '💥',
-      },
-    ],
+    specialAbilities: [],
   },
   {
     id: 'shadow',
@@ -70,26 +32,7 @@ export const CHARACTERS: Character[] = [
     maxHp: 90,
     attackPower: { head: 38, body: 22, legs: 14 },
     color: '#805ad5',
-    specialAbilities: [
-      {
-        id: 'shadow-step',
-        name: 'Шаг тени',
-        description: 'Уклонение и контратака в уязвимое место',
-        damage: 48,
-        cooldown: 3,
-        currentCooldown: 0,
-        icon: '👁️',
-      },
-      {
-        id: 'dark-fury',
-        name: 'Тёмная ярость',
-        description: 'Три быстрых удара в разные зоны',
-        damage: 58,
-        cooldown: 5,
-        currentCooldown: 0,
-        icon: '🌑',
-      },
-    ],
+    specialAbilities: [],
   },
 ];
 

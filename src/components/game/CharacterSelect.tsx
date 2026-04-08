@@ -90,14 +90,8 @@ export default function CharacterSelect({ onStartGame, onBack }: CharacterSelect
                   </div>
                 </div>
                 <div className="text-xs text-gray-500">HP: <span className="text-green-400 font-bold">{char.maxHp}</span></div>
-                <div className="mt-2 flex flex-col gap-1">
-                  {char.specialAbilities.map(s => (
-                    <div key={s.id} className="flex items-center gap-2 text-xs text-gray-400">
-                      <span>{s.icon}</span>
-                      <span className="font-semibold" style={{ color: char.color }}>{s.name}</span>
-                      <span className="text-gray-600">({s.damage} урон)</span>
-                    </div>
-                  ))}
+                <div className="mt-2 text-xs text-gray-500">
+                  💥 С 5-го раунда — <span className="text-orange-400 font-bold">Двойной удар</span>
                 </div>
               </div>
             </div>

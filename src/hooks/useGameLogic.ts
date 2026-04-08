@@ -1,44 +1,51 @@
 import { useState, useCallback } from 'react';
-import { GameState, PlayerAction, RoundResult, Character, SpecialAbility, HitZone } from '@/types/game';
+import { GameState, PlayerAction, RoundResult, Character, HitZone, HitResult } from '@/types/game';
 
 const BLOCK_REDUCTION = 0.85;
-const SPECIAL_IGNORE_BLOCK_IDS = ['death-strike'];
+const DOUBLE_STRIKE_UNLOCK_ROUND = 5;
 
-function calcDamage(attacker: Character, zone: HitZone, specialAbility?: SpecialAbility): number {
-  if (specialAbility) return specialAbility.damage;
+function calcDamage(attacker: Character, zone: HitZone): number {
   return attacker.attackPower[zone];
 }
 
-function aiSelectAction(character: Character, opponentHp: number, specials: SpecialAbility[]): PlayerAction {
-  const availableSpecials = specials.filter(s => s.currentCooldown === 0);
-  if (availableSpecials.length > 0 && Math.random() < 0.35) {
-    const special = availableSpecials[Math.floor(Math.random() * availableSpecials.length)];
-    return { type: 'special', zone: 'head', specialId: special.id };
-  }
-  const rand = Math.random();
-  if (rand < 0.55) {
-    const zones: HitZone[] = ['head', 'body', 'legs'];
-    const weights = [0.5, 0.35, 0.15];
-    let r = Math.random();
-    let zone: HitZone = 'head';
-    for (let i = 0; i < zones.length; i++) {
-      if (r < weights[i]) { zone = zones[i]; break; }
-      r -= weights[i];
-    }
-    return { type: 'attack', zone };
-  } else {
-    const zones: HitZone[] = ['head', 'body', 'legs'];
-    const zone = zones[Math.floor(Math.random() * zones.length)];
-    return { type: 'block', zone };
-  }
+function resolveHit(attacker: Character, zone: HitZone, defenderBlocks: HitZone[]): HitResult {
+  const blocked = defenderBlocks.includes(zone);
+  const raw = calcDamage(attacker, zone);
+  return {
+    zone,
+    damage: blocked ? Math.round(raw * (1 - BLOCK_REDUCTION)) : raw,
+    blocked,
+  };
 }
 
-function tickCooldowns(specials: SpecialAbility[]): SpecialAbility[] {
-  return specials.map(s => ({ ...s, currentCooldown: Math.max(0, s.currentCooldown - 1) }));
-}
+function aiSelectAction(char: Character, round: number, dsAvailable: boolean): PlayerAction {
+  const zones: HitZone[] = ['head', 'body', 'legs'];
 
-function applyCooldown(specials: SpecialAbility[], usedId?: string): SpecialAbility[] {
-  return specials.map(s => s.id === usedId ? { ...s, currentCooldown: s.cooldown } : s);
+  if (dsAvailable && round >= DOUBLE_STRIKE_UNLOCK_ROUND && Math.random() < 0.4) {
+    const z1 = zones[Math.floor(Math.random() * 3)];
+    const z2 = zones[Math.floor(Math.random() * 3)];
+    const blockZone = zones[Math.floor(Math.random() * 3)];
+    return {
+      attackZone: null,
+      blockZones: [],
+      useDoubleStrike: true,
+      doubleStrikeZones: [z1, z2],
+      doubleStrikeBlockZone: blockZone,
+    };
+  }
+
+  const attackZone = Math.random() < 0.7 ? zones[Math.floor(Math.random() * 3)] : null;
+  const blockCount = Math.random() < 0.5 ? 1 : Math.random() < 0.5 ? 2 : 0;
+  const shuffled = [...zones].sort(() => Math.random() - 0.5);
+  const blockZones = shuffled.slice(0, blockCount);
+
+  return {
+    attackZone,
+    blockZones,
+    useDoubleStrike: false,
+    doubleStrikeZones: null,
+    doubleStrikeBlockZone: null,
+  };
 }
 
 export function useGameLogic() {
@@ -56,96 +63,95 @@ export function useGameLogic() {
       roundHistory: [],
       phase: 'select-action',
       winner: null,
-      player1Specials: p1.specialAbilities.map(s => ({ ...s, currentCooldown: 0 })),
-      player2Specials: p2.specialAbilities.map(s => ({ ...s, currentCooldown: 0 })),
+      doubleStrikeAvailable: false,
       isVsAI: vsAI,
     });
+  }, []);
+
+  const resolveRound = useCallback((prev: GameState, p1Action: PlayerAction, p2Action: PlayerAction): GameState => {
+    const p1Blocks = p1Action.useDoubleStrike
+      ? (p1Action.doubleStrikeBlockZone ? [p1Action.doubleStrikeBlockZone] : [])
+      : p1Action.blockZones;
+
+    const p2Blocks = p2Action.useDoubleStrike
+      ? (p2Action.doubleStrikeBlockZone ? [p2Action.doubleStrikeBlockZone] : [])
+      : p2Action.blockZones;
+
+    const p1Hits: HitResult[] = [];
+    const p2Hits: HitResult[] = [];
+
+    if (p1Action.useDoubleStrike && p1Action.doubleStrikeZones) {
+      p1Action.doubleStrikeZones.forEach(z => p1Hits.push(resolveHit(prev.player1, z, p2Blocks)));
+    } else if (p1Action.attackZone) {
+      p1Hits.push(resolveHit(prev.player1, p1Action.attackZone, p2Blocks));
+    }
+
+    if (p2Action.useDoubleStrike && p2Action.doubleStrikeZones) {
+      p2Action.doubleStrikeZones.forEach(z => p2Hits.push(resolveHit(prev.player2, z, p1Blocks)));
+    } else if (p2Action.attackZone) {
+      p2Hits.push(resolveHit(prev.player2, p2Action.attackZone, p1Blocks));
+    }
+
+    const p1TotalDmg = p2Hits.reduce((s, h) => s + h.damage, 0);
+    const p2TotalDmg = p1Hits.reduce((s, h) => s + h.damage, 0);
+
+    const newP1Hp = Math.max(0, prev.player1Hp - p1TotalDmg);
+    const newP2Hp = Math.max(0, prev.player2Hp - p2TotalDmg);
+
+    const result: RoundResult = {
+      round: prev.currentRound,
+      player1Action: p1Action,
+      player2Action: p2Action,
+      player1Hits: p2Hits,
+      player2Hits: p1Hits,
+      player1TotalDamage: p1TotalDmg,
+      player2TotalDamage: p2TotalDmg,
+      player1Hp: newP1Hp,
+      player2Hp: newP2Hp,
+      doubleStrikeUsedBy: p1Action.useDoubleStrike ? 'player1' : p2Action.useDoubleStrike ? 'player2' : null,
+    };
+
+    let winner: 'player1' | 'player2' | null = null;
+    if (newP1Hp <= 0 && newP2Hp <= 0) winner = 'player1';
+    else if (newP1Hp <= 0) winner = 'player2';
+    else if (newP2Hp <= 0) winner = 'player1';
+
+    const nextRound = prev.currentRound + 1;
+    const dsAvailable = nextRound >= DOUBLE_STRIKE_UNLOCK_ROUND;
+
+    return {
+      ...prev,
+      player1Hp: newP1Hp,
+      player2Hp: newP2Hp,
+      player1Action: p1Action,
+      player2Action: p2Action,
+      roundHistory: [...prev.roundHistory, result],
+      currentRound: nextRound,
+      phase: winner ? 'gameover' : 'reveal',
+      winner,
+      doubleStrikeAvailable: dsAvailable,
+    };
   }, []);
 
   const submitAction = useCallback((action: PlayerAction) => {
     setGameState(prev => {
       if (!prev) return prev;
 
-      let aiAction: PlayerAction | null = null;
       if (prev.isVsAI) {
-        aiAction = aiSelectAction(prev.player2, prev.player1Hp, prev.player2Specials);
+        const aiAction = aiSelectAction(prev.player2, prev.currentRound, prev.doubleStrikeAvailable);
+        return resolveRound(prev, action, aiAction);
       }
 
-      const p1Action = action;
-      const p2Action = aiAction || prev.player2Action;
-
-      if (!p2Action) {
-        return { ...prev, player1Action: p1Action };
-      }
-
-      const p1Special = p1Action.type === 'special' ? prev.player1Specials.find(s => s.id === p1Action.specialId) : undefined;
-      const p2Special = p2Action.type === 'special' ? prev.player2Specials.find(s => s.id === p2Action.specialId) : undefined;
-
-      const ignoreBlockP1 = p1Action.type === 'special' && p1Action.specialId && SPECIAL_IGNORE_BLOCK_IDS.includes(p1Action.specialId);
-      const ignoreBlockP2 = p2Action.type === 'special' && p2Action.specialId && SPECIAL_IGNORE_BLOCK_IDS.includes(p2Action.specialId);
-
-      const p2Blocked = p2Action.type === 'block' && p2Action.zone === p1Action.zone && !ignoreBlockP1;
-      const p1Blocked = p1Action.type === 'block' && p1Action.zone === p2Action.zone && !ignoreBlockP2;
-
-      let p1DmgDealt = 0;
-      let p2DmgDealt = 0;
-
-      if (p1Action.type === 'attack' || p1Action.type === 'special') {
-        p1DmgDealt = calcDamage(prev.player1, p1Action.zone, p1Special);
-        if (p2Blocked) p1DmgDealt = Math.round(p1DmgDealt * (1 - BLOCK_REDUCTION));
-      }
-
-      if (p2Action.type === 'attack' || p2Action.type === 'special') {
-        p2DmgDealt = calcDamage(prev.player2, p2Action.zone, p2Special);
-        if (p1Blocked) p2DmgDealt = Math.round(p2DmgDealt * (1 - BLOCK_REDUCTION));
-      }
-
-      const newP1Hp = Math.max(0, prev.player1Hp - p2DmgDealt);
-      const newP2Hp = Math.max(0, prev.player2Hp - p1DmgDealt);
-
-      const result: RoundResult = {
-        round: prev.currentRound,
-        player1Action: p1Action,
-        player2Action: p2Action,
-        player1Damage: p2DmgDealt,
-        player2Damage: p1DmgDealt,
-        player1Hp: newP1Hp,
-        player2Hp: newP2Hp,
-        player1Blocked: p1Blocked,
-        player2Blocked: p2Blocked,
-        specialUsed: p1Special?.name || p2Special?.name,
-      };
-
-      let winner: 'player1' | 'player2' | null = null;
-      if (newP1Hp <= 0 && newP2Hp <= 0) winner = 'player1';
-      else if (newP1Hp <= 0) winner = 'player2';
-      else if (newP2Hp <= 0) winner = 'player1';
-
-      const newP1Specials = tickCooldowns(applyCooldown(prev.player1Specials, p1Action.specialId));
-      const newP2Specials = tickCooldowns(applyCooldown(prev.player2Specials, p2Action.specialId));
-
-      return {
-        ...prev,
-        player1Hp: newP1Hp,
-        player2Hp: newP2Hp,
-        player1Action: p1Action,
-        player2Action: p2Action,
-        roundHistory: [...prev.roundHistory, result],
-        currentRound: prev.currentRound + 1,
-        phase: winner ? 'gameover' : 'reveal',
-        winner,
-        player1Specials: newP1Specials,
-        player2Specials: newP2Specials,
-      };
+      return { ...prev, player1Action: action };
     });
-  }, []);
+  }, [resolveRound]);
 
   const submitPlayer2Action = useCallback((action: PlayerAction) => {
     setGameState(prev => {
-      if (!prev) return prev;
-      return { ...prev, player2Action: action };
+      if (!prev || !prev.player1Action) return prev;
+      return resolveRound(prev, prev.player1Action, action);
     });
-  }, []);
+  }, [resolveRound]);
 
   const confirmReveal = useCallback(() => {
     setGameState(prev => {

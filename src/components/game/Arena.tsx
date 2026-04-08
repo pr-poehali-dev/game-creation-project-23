@@ -14,7 +14,7 @@ interface ArenaProps {
 }
 
 export default function Arena({ gameState, onSubmitAction, onSubmitP2Action, onConfirmReveal, onBack, onSaveRecord }: ArenaProps) {
-  const { player1, player2, player1Hp, player2Hp, phase, winner, roundHistory, currentRound, isVsAI, player1Specials, player2Specials } = gameState;
+  const { player1, player2, player1Hp, player2Hp, phase, winner, roundHistory, currentRound, isVsAI, doubleStrikeAvailable } = gameState;
   const [p1Submitted, setP1Submitted] = useState(false);
   const [p2Submitted, setP2Submitted] = useState(false);
   const [showResult, setShowResult] = useState(false);
@@ -132,24 +132,31 @@ export default function Arena({ gameState, onSubmitAction, onSubmitP2Action, onC
         </div>
 
         {/* Action Panels */}
+        {doubleStrikeAvailable && (
+          <div className="mx-4 mb-2 text-center text-xs font-bold text-orange-400 py-1 rounded-sm"
+            style={{ background: '#4a1a0033', border: '1px solid #ff660044' }}>
+            💥 С раунда 5 — доступен Двойной удар!
+          </div>
+        )}
+
         {phase === 'select-action' && (
           <div className={`grid ${isVsAI ? 'grid-cols-1' : 'grid-cols-2'} gap-4 px-4 pb-6`}>
             <ActionPanel
               onSubmit={handleP1Action}
-              specials={player1Specials}
               playerName={player1.name}
               playerColor={player1.color}
               disabled={p1Submitted}
               label={isVsAI ? player1.name : `${player1.name} (Игрок 1)`}
+              doubleStrikeAvailable={doubleStrikeAvailable}
             />
             {!isVsAI && (
               <ActionPanel
                 onSubmit={handleP2Action}
-                specials={player2Specials}
                 playerName={player2.name}
                 playerColor={player2.color}
                 disabled={p2Submitted}
                 label={`${player2.name} (Игрок 2)`}
+                doubleStrikeAvailable={doubleStrikeAvailable}
               />
             )}
           </div>
